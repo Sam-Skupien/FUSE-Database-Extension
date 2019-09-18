@@ -1,0 +1,14 @@
+./
+|-AUTHORS                -Lists the authors of this project
+|-ChangeLog              -A dated log of changes, as they are made
+|-configure.ac           -The project's autoconf script
+|-COPYING                -The GNU Public License, V3
+|-INSTALL                -Generic GNU install instructions
+|-Makefile.am            -The project's automake script
+|-NEWS                   -A dated log of updates in narrative form
+|-README                 -Basic instructions on installing and using
+|-src/
+   |-ntapfuse_ops.c      -FUSE filesystem operations
+   |-ntapfuse_ops.h
+   |-ntapfuse.c          -Entry point, command line option parsing
+   |-Makefile.am         -Automake script for files in src/
