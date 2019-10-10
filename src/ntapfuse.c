@@ -30,6 +30,8 @@
 #include <string.h>
 #include <unistd.h>
 
+FILE* log_open(char *base);
+
 struct fuse_operations ntapfuse_ops = {
   .getattr = ntapfuse_getattr,
   .readlink = ntapfuse_readlink,
@@ -90,20 +92,42 @@ main (int argc, char *argv[])
       if (realpath (argv[2], base) == NULL)
 	perror ("main_realpath");
 
+//ntapfuse mount <basedir> <mountpoint> -> ntapfuse <mountpoint>
       int i = 1;
       for (; i < argc; i++)
 	argv[i] = argv[i + 2];
       argc -= 2;
 
-      int ret = fuse_main (argc, argv, &ntapfuse_ops, base);
+    //open logfile
+    FILE *logfile = log_open(base);
+    struct private_state *private_data = malloc(sizeof(struct private_state));
+    private_data->base =(char *)base;
+    private_data->logfile = logfile;
 
+      int ret = fuse_main (argc, argv, &ntapfuse_ops, private_data);
       if (ret < 0)
 	perror ("fuse_main");
 
+      //close the log file
+      fclose(logfile);
       return ret;
     }
   else
     usage ();
 
   return 0;
+}
+
+FILE* log_open(char *base){
+  //create a log file
+  char filename[1024];
+  strcpy(filename, base);
+  strcat(filename, "/ntapfuse.log");
+  
+  FILE *logfile = fopen(filename, "w");
+  fwrite(filename,strlen(filename),1,logfile);
+  fflush(logfile);
+
+  //pass the log file pointer to the fuse_get_context()->private_data for further use.
+  return logfile;
 }

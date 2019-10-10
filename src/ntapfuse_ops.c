@@ -22,6 +22,7 @@
 
 #include "ntapfuse_ops.h"
 #include <stdio.h>
+#include <stdarg.h>
 
 #include <errno.h>
 #include <dirent.h>
@@ -39,7 +40,7 @@
 void
 fullpath (const char *path, char *buf)
 {
-  char *basedir = (char *) fuse_get_context ()->private_data;
+  char *basedir = (char *) PRIVATE_DATA->base;
 
   strcpy (buf, basedir);
   strcat (buf, path);
@@ -202,6 +203,10 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
+  //test log write call
+  fwrite("\nTesting write call", strlen("\nTesting write call"), 1, PRIVATE_DATA->logfile);
+  fflush(PRIVATE_DATA->logfile);
+
   return pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
 }
 
@@ -317,8 +322,25 @@ ntapfuse_access (const char *path, int mode)
   return access (fpath, mode) ? -errno : 0;
 }
 
+
+//log message
+void log_msg(const char* format, ...){
+  
+  va_list ap;
+  va_start(ap, format);
+  
+  //test to log 
+  FILE *fd = fopen("text.txt","w");
+  if(fd == NULL){
+    perror("Error in getattr");
+    return;
+  }
+  vfprintf(fd, format, ap);
+  fclose(fd);
+}
+
 void *
 ntapfuse_init (struct fuse_conn_info *conn)
 {
-  return (fuse_get_context())->private_data;
+  return PRIVATE_DATA;
 }
