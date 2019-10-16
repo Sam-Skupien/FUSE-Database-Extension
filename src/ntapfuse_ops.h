@@ -28,6 +28,8 @@
 #include <fuse.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 char base[PATH_MAX];
 
@@ -38,6 +40,8 @@ struct private_state{
 };
 //define a macro 
 #define PRIVATE_DATA ((struct private_state *)fuse_get_context()->private_data)
+
+void log_msg(const char*, ...);
 
 int ntapfuse_getattr (const char *path, struct stat *buf);
 int ntapfuse_readlink (const char *path, char *target, size_t size);

@@ -32,6 +32,7 @@
 
 #include <sys/xattr.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 /**
  * Appends the path of the root filesystem to the given path, returning
@@ -92,6 +93,8 @@ ntapfuse_unlink (const char *path)
 {
   char fpath[PATH_MAX];
   fullpath (path, fpath);
+
+  log_msg("\nUnlink file: %s by User: %d\n",fpath ,fuse_get_context()->uid);
 
   return unlink (fpath) ? -errno : 0;
 }
@@ -203,9 +206,22 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
+  if(strlen(buf) <= 0){ //The buf is empty, is this going to happen? Just for secure
+    return -1;
+  }
+
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
+
   //test log write call
-  fwrite("\nTesting write call", strlen("\nTesting write call"), 1, PRIVATE_DATA->logfile);
-  fflush(PRIVATE_DATA->logfile);
+  // if(buf[strlen(buf)-1] == '\n'){  //The text editor like gedit write the nextline character into the file
+  //   char *dest = (char *)malloc(strlen(buf));
+  //   strncpy(dest, buf, strlen(buf)-1);
+  //   log_msg("Log data size: %d, Log data: %s, User: %d\n",strlen(dest), dest, fuse_get_context()->uid);  //strlen() pick up the newline character
+  //   free(dest);
+  // }else{
+    log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);  //strlen() pick up the newline character
+  // }
 
   return pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
 }
@@ -322,25 +338,17 @@ ntapfuse_access (const char *path, int mode)
   return access (fpath, mode) ? -errno : 0;
 }
 
-
-//log message
-void log_msg(const char* format, ...){
-  
-  va_list ap;
-  va_start(ap, format);
-  
-  //test to log 
-  FILE *fd = fopen("text.txt","w");
-  if(fd == NULL){
-    perror("Error in getattr");
-    return;
-  }
-  vfprintf(fd, format, ap);
-  fclose(fd);
-}
-
 void *
 ntapfuse_init (struct fuse_conn_info *conn)
 {
   return PRIVATE_DATA;
+}
+
+void log_msg(const char *format, ...){
+  va_list ap;
+  va_start(ap, format);
+
+  vfprintf(PRIVATE_DATA->logfile, format, ap);
+  
+  fflush(PRIVATE_DATA->logfile);
 }

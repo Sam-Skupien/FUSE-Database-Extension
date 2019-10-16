@@ -125,7 +125,6 @@ FILE* log_open(char *base){
   strcat(filename, "/ntapfuse.log");
   
   FILE *logfile = fopen(filename, "w");
-  fwrite(filename,strlen(filename),1,logfile);
   fflush(logfile);
 
   //pass the log file pointer to the fuse_get_context()->private_data for further use.
