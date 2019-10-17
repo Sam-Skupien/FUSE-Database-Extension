@@ -29,8 +29,10 @@
 #include <fuse.h>
 #include <string.h>
 #include <unistd.h>
+#include <sqlite3.h>
 
 FILE* log_open(char *base);
+void open_db(void);
 
 struct fuse_operations ntapfuse_ops = {
   .getattr = ntapfuse_getattr,
@@ -127,6 +129,29 @@ FILE* log_open(char *base){
   FILE *logfile = fopen(filename, "w");
   fflush(logfile);
 
+  //open database
+  open_db();
+
   //pass the log file pointer to the fuse_get_context()->private_data for further use.
   return logfile;
+}
+
+void open_db(){
+   sqlite3 *db;
+   char *zErrMsg = 0;
+   int rc;
+
+   rc = sqlite3_open("test.db", &db);
+
+   if( rc ) {
+      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+      printf("can't open db");
+      fflush(stdout);
+      
+   } else {
+      fprintf(stderr, "Opened database successfully\n");
+      printf("db open");
+      fflush(stdout);
+   }
+   sqlite3_close(db);
 }
