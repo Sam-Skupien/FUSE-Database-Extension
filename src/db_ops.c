@@ -1,8 +1,3 @@
-#include <string.h>
-#include <unistd.h>
-#include <sqlite3.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include "db_ops.h"
 #include "ntapfuse_ops.h"
 
@@ -87,15 +82,15 @@ void open_db(){
 
 
    // populate table
-   /*sql = "INSERT INTO USERS(NAME, SPACE) " \
-         "VALUES('user1', 0); "
-         "INSERT INTO USERS(NAME, SPACE) " \
-         "VALUES('user2', 0);"
-         "INSERT INTO USERS(NAME, SPACE) " \
-         "VALUES('user3', 0);";*/
-
    sql = "INSERT INTO USERS(NAME, FREESPACE) " \
-         "VALUES('sam-skupien', 1000000);";
+         "VALUES('user1', 1000); "
+         "INSERT INTO USERS(NAME, FREESPACE) " \
+         "VALUES('user2', 1000);"
+         "INSERT INTO USERS(NAME, FREESPACE) " \
+         "VALUES('user3', 100);";
+
+   // sql = "INSERT INTO USERS(NAME, FREESPACE) " \
+   //       "VALUES('sam-skupien', 1000000);";
 
 
    /* Execute SQL statement */
