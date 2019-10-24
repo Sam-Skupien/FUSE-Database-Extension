@@ -21,6 +21,7 @@
 #define _XOPEN_SOURCE 500
 
 #include "ntapfuse_ops.h"
+#include "db_ops.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,8 +33,7 @@
 #include <sqlite3.h>
 
 FILE* log_open(char *base);
-void open_db(void);
-static int callback(void *NotUsed, int argc, char **argv, char **azColName);
+
 
 struct fuse_operations ntapfuse_ops = {
   .getattr = ntapfuse_getattr,
@@ -108,6 +108,8 @@ main (int argc, char *argv[])
     private_data->logfile = logfile;
 
       int ret = fuse_main (argc, argv, &ntapfuse_ops, private_data);
+      fprintf(stdout, "Fuse init complete");
+      fflush(stdout);
       if (ret < 0)
 	perror ("fuse_main");
 
@@ -137,71 +139,3 @@ FILE* log_open(char *base){
   return logfile;
 }
 
-void open_db(){
-
-   sqlite3 *db;
-   char *zErrMsg = 0;
-   int rc;
-   char *sql;
-
-   rc = sqlite3_open("ntap.db", &db);
-
-   if(rc) {
-      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-      printf("can't open db");
-      fflush(stdout);
-      
-   } else {
-      fprintf(stderr, "Opened database successfully\n");
-      //fflush(stdout);
-   }
-
-   // initialize table of users
-   sql = "CREATE TABLE USERS("  \
-         "NAME TEXT PRIMARY KEY    NOT NULL," \
-         "SPACE             INT     NOT NULL );";
-
-   /* Execute SQL statement */
-   rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
-   
-   if( rc != SQLITE_OK ){
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      sqlite3_free(zErrMsg);
-
-   } else {
-      fprintf(stdout, "Table created successfully\n");
-   }
-
-
-   // populate table
-   sql = "INSERT INTO USERS(NAME, SPACE) " \
-         "VALUES('user1', 10000); "
-         "INSERT INTO USERS(NAME, SPACE) " \
-         "VALUES('user2', 10000);"
-         "INSERT INTO USERS(NAME, SPACE) " \
-         "VALUES('user3', 10000);";
-
-
-   /* Execute SQL statement */
-   rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
-   
-   if( rc != SQLITE_OK ){
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      sqlite3_free(zErrMsg);
-
-   } else {
-      fprintf(stdout, "Users added successfully\n");
-   }
-
-   sqlite3_close(db);
-   // close this when filesystem is unmounted
-}
-
-static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
-   int i;
-   for(i = 0; i<argc; i++) {
-      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
-   }
-   printf("\n");
-   return 0;
-}

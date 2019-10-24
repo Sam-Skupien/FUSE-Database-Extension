@@ -6,4 +6,4 @@
 
 void open_db(void);
 static int callback(void *NotUsed, int argc, char **argv, char **azColName);
-int write_get_bytes(char *user, const char *buf);
+int write_get_bytes(char *user, int buf_size);

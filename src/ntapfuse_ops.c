@@ -21,14 +21,18 @@
 #define _XOPEN_SOURCE 500
 
 #include "ntapfuse_ops.h"
+#include "db_ops.h"
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 #include <errno.h>
 #include <dirent.h>
 #include <limits.h>
 #include <string.h>
 #include <unistd.h>
+#include <sqlite3.h>
+#include <pwd.h>
 
 #include <sys/xattr.h>
 #include <sys/types.h>
@@ -206,7 +210,8 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
-  if(strlen(buf) <= 0){ //The buf is empty, is this going to happen? Just for secure
+  if(strlen(buf) <= 0){ //The buf is empty, is this going to happen? 
+                        //Justfor secure
     return -1;
   }
 
@@ -220,8 +225,32 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   //   log_msg("Log data size: %d, Log data: %s, User: %d\n",strlen(dest), dest, fuse_get_context()->uid);  //strlen() pick up the newline character
   //   free(dest);
   // }else{
-    log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);  //strlen() pick up the newline character
+
+
+// get username from calling process
+struct passwd *pw;
+uid_t uid = geteuid();
+pw = getpwuid(uid);
+
+char *user_name = pw->pw_name;
+
+//get bytes left from user in database
+if(buf[0] != '\0'){
+    int is_bytes_free = write_get_bytes(user_name, strlen(buf));
+}
+
+
+log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);  //strlen() pick up the newline character
   // }
+
+
+
+//fprintf(stdout, "File size: %ld\n", strlen(buf)-1);
+//fflush(stdout);
+
+
+
+
 
   return pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
 }
@@ -352,3 +381,4 @@ void log_msg(const char *format, ...){
   
   fflush(PRIVATE_DATA->logfile);
 }
+
