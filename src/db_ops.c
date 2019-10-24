@@ -7,7 +7,7 @@
 #include "ntapfuse_ops.h"
 
 
-int write_get_bytes(char *user, int buf_size){
+int write_get_bytes(char *user){
 
    sqlite3 *db;
    char *zErrMsg = 0;
@@ -32,7 +32,7 @@ int write_get_bytes(char *user, int buf_size){
     char *append = "\";";
     strcat(sql_str, append);
 
-    log_msg("sql str from write: %s\nBytes: %s\n", sql_str, buf_size);
+    log_msg("sql str from write: %s\n", sql_str);
 
 
    /* Execute SQL statement 
@@ -47,6 +47,8 @@ int write_get_bytes(char *user, int buf_size){
    }*/
 
    sqlite3_close(db);
+
+   return 0;
 }
 
 void open_db(){

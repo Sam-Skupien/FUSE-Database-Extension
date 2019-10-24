@@ -235,9 +235,9 @@ pw = getpwuid(uid);
 char *user_name = pw->pw_name;
 
 //get bytes left from user in database
-if(buf[0] != '\0'){
-    int is_bytes_free = write_get_bytes(user_name, strlen(buf));
-}
+
+int is_bytes_free = write_get_bytes(user_name);
+
 
 
 log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);  //strlen() pick up the newline character

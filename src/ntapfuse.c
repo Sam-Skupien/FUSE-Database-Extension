@@ -108,8 +108,6 @@ main (int argc, char *argv[])
     private_data->logfile = logfile;
 
       int ret = fuse_main (argc, argv, &ntapfuse_ops, private_data);
-      fprintf(stdout, "Fuse init complete");
-      fflush(stdout);
       if (ret < 0)
 	perror ("fuse_main");
 
