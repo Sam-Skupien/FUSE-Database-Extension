@@ -2,49 +2,78 @@
 #include "ntapfuse_ops.h"
 
 
-int write_get_bytes(char *user){
+int write_get_bytes(char *user, int file_size){
 
    sqlite3 *db;
+   sqlite3_stmt *stmt;
    char *zErrMsg = 0;
    int rc;
    char *sql;
-   char sql_str[100];
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_remaining;
+   const char* data = "Callback function called";
+   
  
-
-   rc = sqlite3_open("ntap.db", &db);
-
+   // must add full path here or else open will fail
+   rc = sqlite3_open("/home/sam-skupien/Desktop/ntap.db", &db);
    if(rc) {
-      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
       fflush(stdout);
-      
    } else {
-      fprintf(stderr, "Opened database successfully\n");
-      fflush(stdout);
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
    }
 
-    strcpy(sql_str, "\"SELECT FREESPACE FROM USERS WHERE NAME = "); 
-    strcat(sql_str, user);
-    char *append = "\";";
-    strcat(sql_str, append);
+   // copy the user name passed from ntapfuse_ops into the sql string
+   sprintf(sql_str, "SELECT FREESPACE FROM USERS WHERE NAME = '%s';", user);
+   log_msg("Sql str from write: %s  bytes:  %d\n", sql_str, file_size);
 
-    log_msg("sql str from write: %s\n", sql_str);
+   rc = sqlite3_prepare_v2(db, sql_str, -1, &stmt, NULL);
+   if (rc != SQLITE_OK) {
+       log_msg("Error selecting User: %s\n", sqlite3_errmsg(db));
+   }
+    
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
 
+   if (rc != SQLITE_DONE) {
+       log_msg("Error reading DB return STR: %s\n", sqlite3_errmsg(db));
+   }
 
-   /* Execute SQL statement 
-   rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
-   
-   if( rc != SQLITE_OK ){
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
-      sqlite3_free(zErrMsg);
+   // close query
+   sqlite3_finalize(stmt);
 
-   } else {
-      fprintf(stdout, "Users added successfully\n");
-   }*/
+   // calculate the number of bytes that would remain after write is complete
+   bytes_remaining = total_bytes - file_size;
+   log_msg("Bytes remaining: %d\n", bytes_remaining);
 
-   sqlite3_close(db);
+   // clear buffer
+   strcpy(sql_str, ""); 
 
-   return 0;
+   // if bytes remaining in user account is greater than or equal than
+   // 0 then write can proceed. else return 0 indicating not enough space
+   if(bytes_remaining >= 0){
+       
+       // Create sql statement for update
+       sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", bytes_remaining, user);
+
+       log_msg("%s\n", sql_str);
+ 
+       // execute sql statement, close db then return 1. 
+       rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+        sqlite3_close(db);
+        return 1;
+    } else {
+        sqlite3_close(db);
+        return 0;
+    }
 }
+
+
 
 void open_db(){
 
@@ -56,12 +85,11 @@ void open_db(){
    rc = sqlite3_open("ntap.db", &db);
 
    if(rc) {
-      fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-      fflush(stdout);
-      
+      //log_msg("Error opening database from open_db\n");      
+      fprintf(stderr, "Can't open databse: %s\n", sqlite3_errmsg(db));
    } else {
-      fprintf(stderr, "Opened database successfully\n");
-      //fflush(stdout);
+      fprintf(stderr, "Database Created\n");
+      fflush(stdout);
    }
 
    // initialize table of users
@@ -70,45 +98,42 @@ void open_db(){
          "FREESPACE             INT     NOT NULL );";
 
    /* Execute SQL statement */
-   rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
+   rc = sqlite3_exec(db, sql, insert_callback, 0, &zErrMsg);
    
-   if( rc != SQLITE_OK ){
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
+   if(rc != SQLITE_OK){
+      //log_msg("Error creating table\n");
+      fprintf(stderr, "Can't init table: %s\n", zErrMsg);
       sqlite3_free(zErrMsg);
-
    } else {
-      fprintf(stdout, "Table created successfully\n");
+      fprintf(stdout, "Table initialized\n");
    }
 
-
    // populate table
-   sql = "INSERT INTO USERS(NAME, FREESPACE) " \
-         "VALUES('user1', 1000); "
-         "INSERT INTO USERS(NAME, FREESPACE) " \
-         "VALUES('user2', 1000);"
-         "INSERT INTO USERS(NAME, FREESPACE) " \
-         "VALUES('user3', 100);";
+   //sql = "INSERT INTO USERS(NAME, FREESPACE) " \
+       //  "VALUES('user1', 1000); "
+       //  "INSERT INTO USERS(NAME, FREESPACE) " \
+       //  "VALUES('user2', 1000);"
+       //  "INSERT INTO USERS(NAME, FREESPACE) " \
+       //  "VALUES('user3', 100);";
 
-   // sql = "INSERT INTO USERS(NAME, FREESPACE) " \
-   //       "VALUES('sam-skupien', 1000000);";
+    sql = "INSERT INTO USERS(NAME, FREESPACE) " \
+          "VALUES('sam-skupien', 5);";
 
 
    /* Execute SQL statement */
-   rc = sqlite3_exec(db, sql, callback, 0, &zErrMsg);
+   rc = sqlite3_exec(db, sql, insert_callback, 0, &zErrMsg);
    
    if( rc != SQLITE_OK ){
-      fprintf(stderr, "SQL error: %s\n", zErrMsg);
+      //log_msg("Error inserting values.\n");
+      fprintf(stderr, "Can't init table: %s\n", zErrMsg);
       sqlite3_free(zErrMsg);
-
    } else {
-      fprintf(stdout, "Users added successfully\n");
+      fprintf(stdout, "Values Inserted\n");
    }
-
    sqlite3_close(db);
-   // close this when filesystem is unmounted
 }
 
-static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
+static int insert_callback(void *NotUsed, int argc, char **argv, char **azColName) {
    int i;
    for(i = 0; i<argc; i++) {
       printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
@@ -117,3 +142,13 @@ static int callback(void *NotUsed, int argc, char **argv, char **azColName) {
    return 0;
 }
 
+static int update_callback(void *data, int argc, char **argv, char **azColName){
+   int i;
+   fprintf(stderr, "%s: ", (const char*)data);
+   
+   for(i = 0; i<argc; i++) {
+      printf("%s = %s\n", azColName[i], argv[i] ? argv[i] : "NULL");
+   }
+   printf("\n");
+   return 0;
+}

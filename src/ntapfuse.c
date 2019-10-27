@@ -101,11 +101,14 @@ main (int argc, char *argv[])
 	argv[i] = argv[i + 2];
       argc -= 2;
 
-    //open logfile
-    FILE *logfile = log_open(base);
-    struct private_state *private_data = malloc(sizeof(struct private_state));
-    private_data->base =(char *)base;
-    private_data->logfile = logfile;
+      //open logfile
+      FILE *logfile = log_open(base);
+      struct private_state *private_data = malloc(sizeof(struct private_state));
+      private_data->base =(char *)base;
+      private_data->logfile = logfile;
+
+      // initialize database
+      open_db();
 
       int ret = fuse_main (argc, argv, &ntapfuse_ops, private_data);
       if (ret < 0)
@@ -129,9 +132,6 @@ FILE* log_open(char *base){
   
   FILE *logfile = fopen(filename, "w");
   fflush(logfile);
-
-  //open database
-  open_db();
 
   //pass the log file pointer to the fuse_get_context()->private_data for further use.
   return logfile;

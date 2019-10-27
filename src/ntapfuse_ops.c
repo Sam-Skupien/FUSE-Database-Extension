@@ -227,32 +227,26 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   // }else{
 
 
-// get username from calling process
-struct passwd *pw;
-uid_t uid = geteuid();
-pw = getpwuid(uid);
+  // get username from calling process
+  struct passwd *pw;
+  uid_t uid = geteuid();
+  pw = getpwuid(uid);
+  char *user_name = pw->pw_name;
 
-char *user_name = pw->pw_name;
+  //get bytes left from user in database
+  int is_bytes_free = write_get_bytes(user_name, strlen(buf)-1);
 
-//get bytes left from user in database
-
-int is_bytes_free = write_get_bytes(user_name);
-
-
-
-log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);  //strlen() pick up the newline character
+  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);  //strlen() pick up the newline character
   // }
 
-
-
-//fprintf(stdout, "File size: %ld\n", strlen(buf)-1);
-//fflush(stdout);
-
-
-
-
-
-  return pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
+  if(is_bytes_free) {
+     return pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
+  } else {
+     fprintf(stdout, "Not enough space to save file\n");
+     fflush(stdout);
+     log_msg("Write error thrown with bytes: %d", is_bytes_free); 
+     return -1;
+  }
 }
 
 int
