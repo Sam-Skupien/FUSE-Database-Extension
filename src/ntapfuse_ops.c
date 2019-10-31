@@ -218,15 +218,6 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
 
-  //test log write call
-  // if(buf[strlen(buf)-1] == '\n'){  //The text editor like gedit write the nextline character into the file
-  //   char *dest = (char *)malloc(strlen(buf));
-  //   strncpy(dest, buf, strlen(buf)-1);
-  //   log_msg("Log data size: %d, Log data: %s, User: %d\n",strlen(dest), dest, fuse_get_context()->uid);  //strlen() pick up the newline character
-  //   free(dest);
-  // }else{
-
-
   // get username from calling process
   struct passwd *pw;
   uid_t uid = geteuid();
@@ -236,11 +227,17 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   //get bytes left from user in database
   int is_bytes_free = write_get_bytes(user_name, strlen(buf)-1);
 
-  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);  //strlen() pick up the newline character
-  // }
+  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);
 
   if(is_bytes_free) {
-     return pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
+    int pwrite_return_value = pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
+    if(pwrite_return_value < 0){
+      /*TODO:
+      * pwrite can fail even right now we are not sure why it might fail.
+      * If it fails, we get to roll back the free space in our database and return -errno to our file system
+      */
+    }
+    return pwrite_return_value;
   } else {
      fprintf(stdout, "Not enough space to save file\n");
      fflush(stdout);

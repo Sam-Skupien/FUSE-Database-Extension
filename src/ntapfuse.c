@@ -108,7 +108,7 @@ main (int argc, char *argv[])
       private_data->logfile = logfile;
 
       // initialize database
-      open_db();
+      open_db(base);
 
       int ret = fuse_main (argc, argv, &ntapfuse_ops, private_data);
       if (ret < 0)
