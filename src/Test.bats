@@ -39,7 +39,7 @@ function setup() {
 
 function teardown() {
 	# unmount the file system
-	sudo umount $mountpoint
+	run pkill ntapfuse
 	if [ -d "$basedir" ]; then
 		rm -r $basedir
 	fi
