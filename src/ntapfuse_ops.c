@@ -113,11 +113,11 @@ ntapfuse_unlink (const char *path)
   //log_msg("unlink stat ret: %s\n", strerror(errno));
   //log_msg("unlink file size: %d\n", unlink_size); 
 
-  log_msg("\nLog data size: %d\nUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",unlink_size-1, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, file_owner);
+  log_msg("\nLog data size: %d\nUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",unlink_size, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, file_owner);
 
 
   //execute unlink for db
-  int bytes_unlinked = unlink_get_bytes(file_owner, unlink_size-1);
+  int bytes_unlinked = unlink_get_bytes(file_owner, unlink_size);
   if(bytes_unlinked >= 0) {
     
     /* call to pwrite returns number of bytes written to file if successful
@@ -126,7 +126,7 @@ ntapfuse_unlink (const char *path)
 
     if(unlink_return_value < 0){
       // call write_rollback to return bytes to user if pwrite fails
-      unlink_rollback(file_owner, unlink_size-1);
+      unlink_rollback(file_owner, unlink_size);
       return unlink_return_value;
     }
     
@@ -240,7 +240,7 @@ ntapfuse_truncate (const char *path, off_t off)
       // subtract file_size from offset to get total number
       // of bytes to be subtracted from current quota because file
       // is being expanded by the number of bytes in offset
-      int rem_bytes = off - (file_size - 1); 
+      int rem_bytes = off - (file_size); 
       int bytes_added = truncate_add_bytes(file_owner, rem_bytes);
       if(bytes_added >= 0) {
     
@@ -270,7 +270,7 @@ ntapfuse_truncate (const char *path, off_t off)
 
       // subtract file size-1 (-1 for EOF character) from offset to get total number
       // of bytes to be subtracted from current quota
-      int rem_bytes = (file_size - 1) - off; 
+      int rem_bytes = (file_size) - off; 
       int bytes_remaining = truncate_remove_bytes(file_owner, rem_bytes);
       if(bytes_remaining >= 0) {
     
@@ -357,10 +357,10 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   //log_msg("username from stat: %s\n", user_name2);
   //log_msg("stat ret: %s\n", strerror(errno)); 
 
-  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, statpw->pw_name);
+  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",strlen(buf), buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, statpw->pw_name);
 
   //get bytes left from user in database
-  int bytes_written = write_get_bytes(file_owner, strlen(buf)-1);
+  int bytes_written = write_get_bytes(file_owner, strlen(buf));
   if(bytes_written >= 0) {
     
       /* call to pwrite returns number of bytes written to file if successful
