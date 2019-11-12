@@ -1,10 +1,12 @@
 #include "db_ops.h"
 #include "ntapfuse_ops.h"
 
-// This function is used after fuse_main() is callled, becasue it use the fuse_get_context()->private_data
-// This function check if a user has enough free space to write the bytes into files.
-// If the user has enough free space in the database, update the new free space in the databse and return 1
-// If not , return 0 
+/*
+  This function is used after fuse_main() is called, becasue it use the fuse_get_context()->private_data
+  This function check if a user has enough free space to write the bytes into files.
+  If the user has enough free space in the database, update the new free space in the databse and return number of bytes written which is >= 0
+  If not , return 0 
+*/
 int write_get_bytes(char *user, int file_size){
 
    sqlite3 *db;
@@ -33,7 +35,7 @@ int write_get_bytes(char *user, int file_size){
 
    // copy the user name passed from ntapfuse_ops into the sql string
    sprintf(sql_str, "SELECT FREESPACE FROM USERS WHERE NAME = '%s';", user);
-   log_msg("Sql str from write: %s  bytes:  %d\n", sql_str, file_size);
+   log_msg("Sql str from write: %s\nBytes:  %d\n", sql_str, file_size);
 
    rc = sqlite3_prepare_v2(db, sql_str, -1, &stmt, NULL);
    if (rc != SQLITE_OK) {
@@ -60,24 +62,468 @@ int write_get_bytes(char *user, int file_size){
    strcpy(sql_str, ""); 
 
    // if bytes remaining in user account is greater than or equal to
-   // 0 then write can proceed. else return 0 indicating not enough space
+   //  then write can proceed. else return 0 indicating not enough space
    if(bytes_remaining >= 0){
        
        // Create sql statement for update
        sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", bytes_remaining, user);
 
-       log_msg("%s\n", sql_str);
+       log_msg("%s\n\n", sql_str);
  
        // execute sql statement, close db then return 1. 
        rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
          sqlite3_close(db);
-        return 1;
+        return file_size;
     } else {
         sqlite3_close(db);
-        return 0;
+        return -1;
     }
 }
 
+
+
+
+
+
+
+
+
+
+/* Rolls back the write function if pwrite fails in ntapfuse_ops.c */
+void write_rollback(char *user, int file_size){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_remaining;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // Create sql statement for update
+   sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", file_size, user);
+ 
+   // execute sql statement, close db then return 1. 
+   rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+
+   if(rc) {
+      log_msg("Database Rollback Error: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+   } else {
+      log_msg("Database Rollback Complete with %d bytes %s\n", file_size);
+   }
+
+   sqlite3_close(db);
+}
+
+
+
+
+
+
+
+
+int unlink_get_bytes(char *user, int file_size){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_added;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // copy the user name passed from ntapfuse_ops into the sql string
+   sprintf(sql_str, "SELECT FREESPACE FROM USERS WHERE NAME = '%s';", user);
+   log_msg("Sql str from unlink: %s\nBytes:  %d\n", sql_str, file_size);
+
+   rc = sqlite3_prepare_v2(db, sql_str, -1, &stmt, NULL);
+   if (rc != SQLITE_OK) {
+       log_msg("Error selecting User: %s\n", sqlite3_errmsg(db));
+   }
+    
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
+
+   if (rc != SQLITE_DONE) {
+       log_msg("Error reading DB return STR: %s\n", sqlite3_errmsg(db));
+   }
+
+   // close query
+   sqlite3_finalize(stmt);
+
+   // calculate the number of bytes that would remain if write is complete
+   bytes_added = total_bytes + file_size;
+   log_msg("Bytes added: %d\n", bytes_added);
+
+   // clear buffer
+   strcpy(sql_str, ""); 
+       
+   // Create sql statement for update
+   sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", bytes_added, user);
+
+   log_msg("%s\n\n", sql_str);
+ 
+   // execute sql statement, close db then return 1. 
+   rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+   sqlite3_close(db);
+   return file_size;
+
+} 
+
+
+/* Rollsback the unlink function if it fails in ntapfuse_ops.c
+  It gets the file size of the file that could not be unlinked and gets 
+  the amount of bytes left from a users quota. It then subracts the file
+  size from the users quota and commits it to the database. 
+*/
+void unlink_rollback(char *user, int file_size){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_removed;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // copy the user name passed from ntapfuse_ops into the sql string
+   sprintf(sql_str, "SELECT FREESPACE FROM USERS WHERE NAME = '%s';", user);
+
+   rc = sqlite3_prepare_v2(db, sql_str, -1, &stmt, NULL);
+   if (rc != SQLITE_OK) {
+       log_msg("Error selecting User: %s\n", sqlite3_errmsg(db));
+   }
+    
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
+
+   if (rc != SQLITE_DONE) {
+       log_msg("Error reading DB return STR: %s\n", sqlite3_errmsg(db));
+   }
+
+   // close query
+   sqlite3_finalize(stmt);
+
+   // calculate the number of bytes that will be subtracted from quota
+   bytes_removed = total_bytes - file_size;
+
+   // clear buffer
+   strcpy(sql_str, ""); 
+       
+   // Create sql statement for update
+   sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", bytes_removed, user);
+ 
+   // execute sql statement, close db then return 1. 
+   rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+   sqlite3_close(db);
+   
+}
+
+
+
+int truncate_add_bytes(char *user, int offset){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_remaining;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // copy the user name passed from ntapfuse_ops into the sql string
+   sprintf(sql_str, "SELECT FREESPACE FROM USERS WHERE NAME = '%s';", user);
+   log_msg("Sql str from truncate add bytes: %s\nBytes:  %d\n", sql_str, offset);
+
+   rc = sqlite3_prepare_v2(db, sql_str, -1, &stmt, NULL);
+   if (rc != SQLITE_OK) {
+       log_msg("Error selecting User: %s\n", sqlite3_errmsg(db));
+   }
+    
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
+
+   if (rc != SQLITE_DONE) {
+       log_msg("Error reading DB return STR: %s\n", sqlite3_errmsg(db));
+   }
+
+   // close query
+   sqlite3_finalize(stmt);
+
+   // calculate the number of bytes that would remain if write is complete
+   bytes_remaining = total_bytes - offset;
+   log_msg("Bytes remaining: %d\n", bytes_remaining);
+
+   // clear buffer
+   strcpy(sql_str, ""); 
+
+   // if bytes remaining in user account is greater than or equal to
+   //  then write can proceed. else return 0 indicating not enough space
+   if(bytes_remaining >= 0){
+       
+       // Create sql statement for update
+       sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", bytes_remaining, user);
+
+       log_msg("%s\n\n", sql_str);
+ 
+       // execute sql statement, close db then return 1. 
+       rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+         sqlite3_close(db);
+        return bytes_remaining;
+    } else {
+        sqlite3_close(db);
+        return -1;
+    }
+}
+
+
+
+void truncate_add_rollback(char *user, int offset){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_remaining;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
+
+   int add_bytes = total_bytes + offset;
+
+   // Create sql statement for update
+   sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", add_bytes, user);
+ 
+   // execute sql statement, close db then return 1. 
+   rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+
+   if(rc) {
+      log_msg("Database Rollback Error: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+   } else {
+      log_msg("Database Rollback Complete with %d bytes %s\n", add_bytes);
+   }
+
+   sqlite3_close(db);
+}
+
+
+
+int truncate_remove_bytes(char *user, int offset){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_remaining;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // copy the user name passed from ntapfuse_ops into the sql string
+   sprintf(sql_str, "SELECT FREESPACE FROM USERS WHERE NAME = '%s';", user);
+   log_msg("Sql str from truncate rem bytes: %s\nBytes:  %d\n", sql_str, offset);
+
+   rc = sqlite3_prepare_v2(db, sql_str, -1, &stmt, NULL);
+   if (rc != SQLITE_OK) {
+       log_msg("Error selecting User: %s\n", sqlite3_errmsg(db));
+   }
+    
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
+
+   if (rc != SQLITE_DONE) {
+       log_msg("Error reading DB return STR: %s\n", sqlite3_errmsg(db));
+   }
+
+   // close query
+   sqlite3_finalize(stmt);
+
+   // calculate the number of bytes that would remain if write is complete
+   bytes_remaining = total_bytes + offset;
+   log_msg("Bytes remaining: %d\n", bytes_remaining);
+
+   // clear buffer
+   strcpy(sql_str, ""); 
+
+   // if bytes remaining in user account is greater than or equal to
+   //  then write can proceed. else return 0 indicating not enough space
+   if(bytes_remaining >= 0){
+       
+       // Create sql statement for update
+       sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", bytes_remaining, user);
+
+       log_msg("%s\n\n", sql_str);
+ 
+       // execute sql statement, close db then return 1. 
+       rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+         sqlite3_close(db);
+        return bytes_remaining;
+    } else {
+        sqlite3_close(db);
+        return -1;
+    }
+
+}
+
+
+
+void truncate_remove_rollback(char *user, int offset){
+
+   sqlite3 *db;
+   sqlite3_stmt *stmt;
+   char *zErrMsg = 0;
+   int rc;
+   char *sql;
+   char sql_str[1000];
+   int total_bytes;
+   int bytes_remaining;
+   const char* data = "Callback function called";
+   
+   char filename[1024];
+   strcpy(filename, PRIVATE_DATA->base);
+   strcat(filename, "/ntap.db");
+   // must add full path here or else open will fail
+   rc = sqlite3_open(filename, &db);
+   if(rc) {
+      //log_msg("Database Open Error: %s\n", sqlite3_errmsg(db));
+      fprintf(stderr, "Cannot open Database: %s\n", sqlite3_errmsg(db));
+      fflush(stdout);
+   } else {
+      //fprintf(stderr, "Database Opened: %s\n");
+      //fflush(stdout);
+   }
+
+   // read data returned from databse
+   while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        total_bytes = (int)sqlite3_column_int (stmt, 0); 
+   }
+
+   int add_bytes = total_bytes - offset;
+
+   // Create sql statement for update
+   sprintf(sql_str, "UPDATE USERS set FREESPACE = %d where NAME = '%s';", add_bytes, user);
+ 
+   // execute sql statement, close db then return 1. 
+   rc = sqlite3_exec(db, sql_str, update_callback, (void*)data, &zErrMsg);
+
+   if(rc) {
+      log_msg("Database Rollback Error: %s\n", sqlite3_errmsg(db));
+      sqlite3_close(db);
+   } else {
+      log_msg("Database Rollback Complete with %d bytes %s\n", add_bytes);
+   }
+
+   sqlite3_close(db);
+}
 
 
 void open_db(char *base){
@@ -121,7 +567,7 @@ void open_db(char *base){
 
    // populate table
     sql = "INSERT INTO USERS(NAME, FREESPACE) " \
-          "VALUES('sam-skupien', 5);"
+          "VALUES('sam-skupien', 20);"
           "INSERT INTO USERS(NAME, FREESPACE) " \
           "VALUES('dongbang', 10);";
 

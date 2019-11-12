@@ -98,9 +98,49 @@ ntapfuse_unlink (const char *path)
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
-  log_msg("\nUnlink file: %s by User: %d\n",fpath ,fuse_get_context()->uid);
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
 
-  return unlink (fpath) ? -errno : 0;
+  // get username from file owner and the file size
+  struct stat st;
+  struct passwd *statpw;
+  int st_status = stat(fpath, &st);
+  uid_t st_uid = st.st_uid;
+  statpw = getpwuid(st_uid);
+  char *file_owner = statpw->pw_name;
+  int unlink_size = st.st_size;
+  //log_msg("username from unlink stat: %s\n", file_owner);
+  //log_msg("unlink stat ret: %s\n", strerror(errno));
+  //log_msg("unlink file size: %d\n", unlink_size); 
+
+  log_msg("\nLog data size: %d\nUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",unlink_size-1, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, file_owner);
+
+
+  //execute unlink for db
+  int bytes_unlinked = unlink_get_bytes(file_owner, unlink_size-1);
+  if(bytes_unlinked >= 0) {
+    
+    /* call to pwrite returns number of bytes written to file if successful
+       or -1 if write failed */
+    int unlink_return_value = unlink (fpath) ? -errno : 0;
+
+    if(unlink_return_value < 0){
+      // call write_rollback to return bytes to user if pwrite fails
+      unlink_rollback(file_owner, unlink_size-1);
+      return unlink_return_value;
+    }
+    
+    // tell user how many bytes have been saved
+    fprintf(stdout, "%d bytes unlinked from quota", bytes_unlinked);
+    fflush(stdout); 
+    return unlink_return_value;
+    
+    } else {
+       fprintf(stdout, "Could not unlink file\n");
+       fflush(stdout);
+       log_msg("Write error thrown with bytes: %d\n", bytes_unlinked); 
+       return -1;
+    }
 }
 
 int
@@ -169,7 +209,96 @@ ntapfuse_truncate (const char *path, off_t off)
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
-  return truncate (fpath, off) ? -errno : 0;
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
+
+  // get username from file owner and the file size
+  struct stat st;
+  struct passwd *statpw;
+  int st_status = stat(fpath, &st);
+  uid_t st_uid = st.st_uid;
+  statpw = getpwuid(st_uid);
+  char *file_owner = statpw->pw_name;
+  int file_size = st.st_size;
+  //log_msg("username from truncate stat: %s\n", file_owner);
+  //log_msg("truncate stat ret: %s\n", strerror(errno));
+  //log_msg("truncate file size: %d\n", off); 
+
+  log_msg("\nLog data size: %d\nUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",off, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, file_owner);
+
+  // if the offset is the same as the filesize truncate can be called
+  // as is because no bytes will be added or removed. No need to 
+  // access database. if offset is greater than filesize then user
+  // quota will be decreased by offset. Else user quota will be 
+  // increased by offset
+  if(off == file_size){
+
+    return truncate (fpath, off) ? -errno : 0;
+
+  } else if (off > file_size) {
+
+      // subtract file_size from offset to get total number
+      // of bytes to be subtracted from current quota because file
+      // is being expanded by the number of bytes in offset
+      int rem_bytes = off - (file_size - 1); 
+      int bytes_added = truncate_add_bytes(file_owner, rem_bytes);
+      if(bytes_added >= 0) {
+    
+         /* call to pwrite returns number of bytes written to file if successful
+       or -1 if write failed */
+         int truncate_return_value = truncate (fpath, off) ? -errno : 0;
+
+         if(truncate_return_value < 0){
+            // call write_rollback to return bytes to user if pwrite fails
+            truncate_add_rollback(file_owner, rem_bytes);
+            return truncate_return_value;
+         }
+    
+         // tell user how many bytes have been saved
+         fprintf(stdout, "%d bytes removed via truncate from quota", bytes_added);
+         fflush(stdout); 
+         return truncate_return_value;
+    
+      } else {
+         fprintf(stdout, "Could not add bytes to file\n");
+         fflush(stdout);
+         log_msg("Write error thrown with bytes: %d\n", bytes_added); 
+         return -1;
+      }
+
+  } else {
+
+      // subtract file size-1 (-1 for EOF character) from offset to get total number
+      // of bytes to be subtracted from current quota
+      int rem_bytes = (file_size - 1) - off; 
+      int bytes_remaining = truncate_remove_bytes(file_owner, rem_bytes);
+      if(bytes_remaining >= 0) {
+    
+         /* call to pwrite returns number of bytes written to file if successful
+       or -1 if write failed */
+         int truncate_return_value = truncate (fpath, off) ? -errno : 0;
+
+         if(truncate_return_value < 0){
+            // call write_rollback to return bytes to user if pwrite fails
+            truncate_remove_rollback(file_owner, rem_bytes);
+            return truncate_return_value;
+         }
+    
+         // tell user how many bytes have been saved
+         fprintf(stdout, "%d bytes removed via truncate from quota", bytes_remaining);
+         fflush(stdout); 
+         return truncate_return_value;
+    
+      } else {
+         fprintf(stdout, "Could not remove bytes from file\n");
+         fflush(stdout);
+         log_msg("Write error thrown with bytes: %d\n", rem_bytes); 
+         return -1;
+      }
+
+  }
+
+  //return truncate (fpath, off) ? -errno : 0;
 }
 
 int
@@ -218,32 +347,43 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
 
-  // get username from calling process
-  struct passwd *pw;
-  uid_t uid = geteuid();
-  pw = getpwuid(uid);
-  char *user_name = pw->pw_name;
+  // get username from file owner
+  struct stat st;
+  struct passwd *statpw;
+  int st_status = stat(fpath, &st);
+  uid_t st_uid = st.st_uid;
+  statpw = getpwuid(st_uid);
+  char *file_owner = statpw->pw_name;
+  //log_msg("username from stat: %s\n", user_name2);
+  //log_msg("stat ret: %s\n", strerror(errno)); 
+
+  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, statpw->pw_name);
 
   //get bytes left from user in database
-  int is_bytes_free = write_get_bytes(user_name, strlen(buf)-1);
+  int bytes_written = write_get_bytes(file_owner, strlen(buf)-1);
+  if(bytes_written >= 0) {
+    
+      /* call to pwrite returns number of bytes written to file if successful
+       or -1 if write failed */
+      int pwrite_return_value = pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
 
-  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nUser Name: %s\n",strlen(buf)-1, buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, pw->pw_name);
-
-  if(is_bytes_free) {
-    int pwrite_return_value = pwrite (fi->fh, buf, size, off) < 0 ? -errno : size;
-    if(pwrite_return_value < 0){
-      /*TODO:
-      * pwrite can fail even right now we are not sure why it might fail.
-      * If it fails, we get to roll back the free space in our database and return -errno to our file system
-      */
+      if(pwrite_return_value < 0){
+        // call write_rollback to return bytes to user if pwrite fails
+        write_rollback(file_owner, strlen(buf)-1);
+        return pwrite_return_value;
+      }
+    
+      // tell user how many bytes have been saved
+      fprintf(stdout, "%d bytes written to file", bytes_written);
+      fflush(stdout); 
+      return pwrite_return_value;
+    
+    } else {
+       fprintf(stdout, "Not enough space to save file\n");
+       fflush(stdout);
+       log_msg("Write error thrown with bytes: %d\n", bytes_written); 
+       return -1;
     }
-    return pwrite_return_value;
-  } else {
-     fprintf(stdout, "Not enough space to save file\n");
-     fflush(stdout);
-     log_msg("Write error thrown with bytes: %d", is_bytes_free); 
-     return -1;
-  }
 }
 
 int
