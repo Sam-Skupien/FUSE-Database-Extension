@@ -18,3 +18,9 @@ void truncate_add_rollback(char *user, int size);
 
 int truncate_remove_bytes(char *user, int size);
 void truncate_remove_rollback(char *user, int size);
+
+int get_num_dirs(char *user);
+void mkdir_rollback(char *user);
+
+int rem_num_dirs(char *user);
+void rmdir_rollback(char *user);

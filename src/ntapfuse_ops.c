@@ -89,7 +89,42 @@ ntapfuse_mkdir (const char *path, mode_t mode)
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
-  return mkdir (fpath, mode | S_IFDIR) ? -errno : 0;
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
+
+  // get username from directory owner
+  struct passwd *pw;
+  uid_t uid = geteuid();
+  pw = getpwuid(uid);
+  char *dir_owner = pw->pw_name;
+
+  log_msg("\nNum Directories: 1\nUser ID: %s\nTime: %d-%d-%d %d:%d:%d\n", dir_owner, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+  
+  //get number of durs left from user in database
+  int dirs_created = get_num_dirs(dir_owner);
+  if(dirs_created >= 0) {
+    
+      // call to pwrite returns number of bytes written to file if successful
+      //or -1 if write failed 
+      int mkdir_return_value = mkdir (fpath, mode | S_IFDIR) ? -errno : 0;
+
+      if(mkdir_return_value < 0){
+        // call mkdir_rollback to return dirs to user if mkdir fails
+        mkdir_rollback(dir_owner);
+        return mkdir_return_value;
+      }
+    
+      // tell user how many bytes have been saved
+      fprintf(stdout, "%d bytes written to file", dirs_created);
+      fflush(stdout); 
+      return mkdir_return_value;
+    
+    } else {
+       fprintf(stdout, "Not enough space to make directory\n");
+       fflush(stdout);
+       log_msg("Write error thrown with dirs: %d\n", dirs_created); 
+       return -1;
+    }
 }
 
 int
@@ -149,7 +184,44 @@ ntapfuse_rmdir (const char *path)
   char fpath[PATH_MAX];
   fullpath (path, fpath);
 
-  return rmdir (fpath) ? -errno : 0;
+  time_t t = time(NULL);
+  struct tm tm = *localtime(&t);
+
+  // get username from directory owner
+  struct passwd *pw;
+  uid_t uid = geteuid();
+  pw = getpwuid(uid);
+  char *dir_owner = pw->pw_name;
+
+  log_msg("\nNum Directories: 1\nUser ID: %s\nTime: %d-%d-%d %d:%d:%d\n", dir_owner, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+  
+  //get number of dirs left from user in database
+  int dirs_removed = rem_num_dirs(dir_owner);
+  if(dirs_removed >= 0) {
+    
+      // call to pwrite returns number of bytes written to file if successful
+      //or -1 if write failed 
+      int rmdir_return_value = rmdir (fpath) ? -errno : 0;
+
+      if(rmdir_return_value < 0){
+        // call rmdir_rollback to return dirs to user if rmdir fails
+        rmdir_rollback(dir_owner);
+        return rmdir_return_value;
+      }
+    
+      // tell user how many bytes have been saved
+      fprintf(stdout, "%d Directory removed from quota", dirs_removed);
+      fflush(stdout); 
+      return rmdir_return_value;
+    
+    } else {
+       fprintf(stdout, "Not enough space to make directory\n");
+       fflush(stdout);
+       log_msg("Write error thrown with dirs: %d\n", dirs_removed); 
+       return -1;
+    }
+
+  //return rmdir (fpath) ? -errno : 0;
 }
 
 int
