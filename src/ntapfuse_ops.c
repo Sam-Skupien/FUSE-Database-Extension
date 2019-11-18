@@ -423,13 +423,13 @@ ntapfuse_write (const char *path, const char *buf, size_t size, off_t off,
   struct stat st;
   struct passwd *statpw;
   int st_status = stat(fpath, &st);
-  uid_t st_uid = st.st_uid;
+  uid_t st_uid = fuse_get_context()->uid;
   statpw = getpwuid(st_uid);
   char *file_owner = statpw->pw_name;
   //log_msg("username from stat: %s\n", user_name2);
   //log_msg("stat ret: %s\n", strerror(errno)); 
 
-  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",strlen(buf), buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, statpw->pw_name);
+  log_msg("\nLog data size: %d\nLog data:\n%sUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",strlen(buf), buf, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, file_owner);
 
   //get bytes left from user in database
   int bytes_written = write_get_bytes(file_owner, strlen(buf));

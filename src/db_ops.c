@@ -870,6 +870,7 @@ void open_db(char *base){
           "VALUES('dongbang', 10, 3);";
 
 
+
    /* Execute SQL statement */
    rc = sqlite3_exec(db, sql, insert_callback, 0, &zErrMsg);
    
