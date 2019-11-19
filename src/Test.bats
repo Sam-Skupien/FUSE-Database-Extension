@@ -26,7 +26,7 @@ function setup() {
 	# If this child process is a background process that will run indefinitely,
 	# Bats will be similarly blocked for the same amount of time
 	# More details: https://github.com/bats-core/bats-core
-	ntapfuse mount $basedir $mountpoint -o allow_other 3>&-
+	ntapfuse mount $basedir $mountpoint -o allow_other -s 3>&-
 }
 
 function teardown() {
@@ -93,7 +93,7 @@ function del_three_users {
 	echo "	Actual output: $(sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'sam-skupien'") == Expected output: 20">&3
 	[ "$output" = 20 ]
 
-	echo "	1.SELECT FREESPACE from USERS where NAME = 'dongbang'"	>&3
+	echo "	2.SELECT FREESPACE from USERS where NAME = 'dongbang'"	>&3
 	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
 	
 	echo "	Actual output: $(sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'") == Expected output: 10">&3
@@ -101,45 +101,49 @@ function del_three_users {
 }
 
 # TODO: This test can be enhanced by dynamically query from the database and write the number of bytes based on the query.
-@test "Test1: test if write function allows users to write bytes with enough FREESPACE" {
+@test "Test1: test ifd write function allows users to write bytes with enough FREESPACE" {
 	# IMPORTANT: run echo "abcdefghij" >> $mountpoint/abc will not redirect the data to the file
-	echo "abcdefghi" >> $mountpoint/abc 
-	run cat $mountpoint/abc
-	[ "$output" = "abcdefghi" ]
-	[ "$status" -eq 0 ]
-	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
-	# [ "$output" = 0 ]
-	# Explanation of tests
 	echo "Steps for Test 1:">&3
 	echo "	1.echo 'abcdefghi' >> $mountpoint/abc" >&3
+	sudo -u dongbang echo "abcdefghi" >> $mountpoint/abc 
+
 	echo "	2.cat $mountpoint/abc" >&3 
+	run cat $mountpoint/abc
+
 	echo "	Actual output: $(cat $mountpoint/abc) == Expected output: abcdefghi" >&3
+	[ "$output" = "abcdefghi" ]
+	[ "$status" -eq 0 ]
+
 	echo "	3.SELECT FREESPACE from USERS where NAME = 'dongbang'" >&3
 	echo "	Actual output: $(sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'") == Expected output: 0" >&3
+	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
+	[ "$output" = 0 ]
 }
 
 @test "Test2: test if write function prevents users from writing bytes more than their quota." {
+	
 	# use if to deal with errors in bash command
-	if [! echo "abcdefghij" >> $mountpoint/abc ] 
-	then
-		# the cat command return 1 because the file 'abc' does not exist	 
-		run cat $mountpoint/abc
-		[ "$status" -eq 1 ] 
-	fi
-	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
-	[ "$output" = 10 ]
-	# Explanation
 	echo "Steps for Test 2:">&3
 	echo "	1.echo 'abcdefghij' >> $mountpoint/abc" >&3
 	echo "	2.cat $mountpoint/abc" >&3
 	echo "	Actual status: 1 == Expected status: 1, because file abc does not exist">&3
+	if [! echo "abcdefghij" >> $mountpoint/abc ] 
+	then
+		# the cat command return 1 because the file 'abc' does not exist
+		run cat $mountpoint/abc
+		[ "$status" -eq 1 ] 
+	fi
+
 	echo "	3.SELECT FREESPACE from USERS where NAME = 'dongbang'" >&3
 	echo "	Actual output: $(sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'") == Expected output: 10, because user's write operation is rejected" >&3
+	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
+	[ "$output" = 10 ]
 }
 
 @test "Test3: test three users using write function to write bytes into files" {
+	
 	echo "Steps for Test 3:" >&3
-	echo "	1.create three users: user1, user2, and user3" >&3
+	echo "	1.Create three users: user1, user2, and user3" >&3
 	# create three users
 	create_three_users
 
@@ -167,7 +171,67 @@ function del_three_users {
 	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'user3'"
 	[ "$output" = 0 ]
 
+	echo "	5.Test if the FREESAPCE for user1, user2, user3 equal to 0." >&3
+
 	del_three_users
+}
+
+@test "Test: test if unlink function will return FREESPACE back to user" {
+	echo "Steps for Test:" >&3
+
+	echo "	1.User ‘dongbang’ writes 'abcdefghi' to file1" >&3
+	sudo -u dongbang echo "abcdefghi" >> $mountpoint/file1 
+
+	echo "	2.Test if the FREESPACE of ‘dongbang’ is equal to 0" >&3
+	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
+	[ "$output" = 0 ]
+
+	echo "	3.Delete the file1" >&3
+	sudo -u dongbang rm $mountpoint/file1 
+
+	echo "	4.Query the FREESPACE of user ‘dongbang’ from the database." >&3
+	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"
+
+	echo "	5.Actual output: $(sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'") == Expected output: 10" >&3	
+	[ "$output" = 10 ]
+}
+
+@test "Test: Test truncate to extend the size of a file" {
+	
+	echo "Steps for Test:" >&3
+
+	echo "	1.User ‘dongbang’ writes 'abc' to file1" >&3
+	sudo -u dongbang echo "abc" >> $mountpoint/file1
+
+	echo "	2.truncate the file1 size to 10">&3
+	truncate -s 10 $mountpoint/file1
+
+	echo "	3.Test if the FREESPACE for ‘dongbang’ is 0.">&3
+	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"	
+	[ "$output" = 0 ]
+
+	echo "	4.Test if the file size for file1 is 10 ">&3
+	filesize=$(wc -c $mountpoint/file1 | awk '{print $1}')
+	[ "$filesize" -eq 10 ]
+}
+
+@test "Test: Test truncate to shrink the size of a file" {
+	
+	echo "Steps for Test:" >&3
+
+	echo "	1.User ‘dongbang’ writes 'abcdefghi' to file1" >&3
+	sudo -u dongbang echo "abc" >> $mountpoint/file1
+
+	echo "	2.truncate the file1 size to 5">&3
+	truncate -s 5 $mountpoint/file1
+
+	echo "	3.Test if the FREESPACE for ‘dongbang’ is 5.">&3
+	run sqlite3 $mountpoint/ntap.db "SELECT FREESPACE from USERS where NAME = 'dongbang'"	
+	[ "$output" = 5 ]
+
+	echo "	4.Test if the file size for file1 is 5 ">&3
+	filesize=$(wc -c $mountpoint/file1 | awk '{print $1}')
+	[ "$filesize" -eq 5 ]
 }
 
 

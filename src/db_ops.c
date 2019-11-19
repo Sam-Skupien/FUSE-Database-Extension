@@ -867,7 +867,13 @@ void open_db(char *base){
     sql = "INSERT INTO USERS(NAME, FREESPACE, DIRS) " \
           "VALUES('sam-skupien', 20, 3);"
           "INSERT INTO USERS(NAME, FREESPACE, DIRS) " \
-          "VALUES('dongbang', 10, 3);";
+          "VALUES('dongbang', 10, 3);"
+          "INSERT INTO USERS(NAME, FREESPACE, DIRS) " \
+          "VALUES('user1', 5, 3);"
+          "INSERT INTO USERS(NAME, FREESPACE, DIRS) " \
+          "VALUES('user2', 10, 3);"
+          "INSERT INTO USERS(NAME, FREESPACE, DIRS) " \
+          "VALUES('user3', 15, 3);";
 
 
 
