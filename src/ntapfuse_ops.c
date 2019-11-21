@@ -94,7 +94,7 @@ ntapfuse_mkdir (const char *path, mode_t mode)
 
   // get username from directory owner
   struct passwd *pw;
-  uid_t uid = geteuid();
+  uid_t uid = fuse_get_context()->uid;
   pw = getpwuid(uid);
   char *dir_owner = pw->pw_name;
 
