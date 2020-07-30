@@ -92,16 +92,21 @@ ntapfuse_mkdir (const char *path, mode_t mode)
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
 
-  // get username from directory owner
+  // passwd is a struct that holds information about the current users account
   struct passwd *pw;
+  // fuse_get_context() returns a pointer to the structure fuse_context. This is used to get information about the thread that is accessing the file system
   uid_t uid = fuse_get_context()->uid;
+  // get final uid 
   pw = getpwuid(uid);
+  // set the directory owners name to be passed into the database
   char *dir_owner = pw->pw_name;
 
   log_msg("\nNum Directories: 1\nUser ID: %s\nTime: %d-%d-%d %d:%d:%d\n", dir_owner, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
   
-  //get number of durs left from user in database
+  //get_num_dirs is called from db_ops.c and decrements the number of user directories if there was room in the quota. It returns 1 if there was enough quota
+  // remaining to add additional directory and 0 if user did not have enough space. 
   int dirs_created = get_num_dirs(dir_owner);
+  // if enough quota was left database was updated and actual call to pwrite is executed. Else output to terminal that no quota remained. 
   if(dirs_created >= 0) {
     
       // call to pwrite returns number of bytes written to file if successful
@@ -109,13 +114,14 @@ ntapfuse_mkdir (const char *path, mode_t mode)
       int mkdir_return_value = mkdir (fpath, mode | S_IFDIR) ? -errno : 0;
 
       if(mkdir_return_value < 0){
-        // call mkdir_rollback to return dirs to user if mkdir fails
+        // call mkdir_rollback to return dirs to user if mkdir fails. Rollback is called because database has been updated to reflect a new directory being added (reducing quota)
+	// so quota must be added back.
         mkdir_rollback(dir_owner);
         return mkdir_return_value;
       }
     
       // tell user how many bytes have been saved
-      fprintf(stdout, "%d bytes written to file", dirs_created);
+      fprintf(stdout, "%d dirs created", dirs_created);
       fflush(stdout); 
       return mkdir_return_value;
     
@@ -136,10 +142,12 @@ ntapfuse_unlink (const char *path)
   time_t t = time(NULL);
   struct tm tm = *localtime(&t);
 
-  // get username from file owner and the file size
+  // get username from file owner and the file size from stat struct
   struct stat st;
   struct passwd *statpw;
+  // get information about file being removed by passing full path
   int st_status = stat(fpath, &st);
+  // gets the file owners uid so the correct quota is amended. 
   uid_t st_uid = st.st_uid;
   statpw = getpwuid(st_uid);
   char *file_owner = statpw->pw_name;
@@ -151,7 +159,8 @@ ntapfuse_unlink (const char *path)
   log_msg("\nLog data size: %d\nUser: %d\nTime: %d-%d-%d %d:%d:%d\nFile Owner: %s\n",unlink_size, fuse_get_context()->uid, tm.tm_year + 1900, tm.tm_mon + 1,tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec, file_owner);
 
 
-  //execute unlink for db
+  // updates the quota for the user who owned the file in the database by adding bytes back to quota. unlink_get_bytes returns number >= 0 upon success. 
+  // if unlink() call fails rollback database to original quota before removal. 
   int bytes_unlinked = unlink_get_bytes(file_owner, unlink_size);
   if(bytes_unlinked >= 0) {
     
